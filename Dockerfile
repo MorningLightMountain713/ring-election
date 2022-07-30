@@ -1,4 +1,12 @@
-FROM node:12-alpine
+FROM redislabs/rejson:latest as redis
+
+FROM node:latest as node
+
+RUN mkdir -p "/usr/lib/redis/modules"
+
+COPY --from=redis /usr/lib/redis/modules/* /usr/lib/redis/modules
+
+COPY --from=redis /usr/local/bin/redis-server /usr/local/bin/redis-cli /usr/local/bin/
 
 # Create app directory
 WORKDIR /usr/src/app

@@ -53,7 +53,7 @@ const createServer = () => {
     // put client connection in the map , and assign partitions.
   })
   heartbeatCheck(heart, addresses)
-  server.listen(peerPort, function () {
+  server.listen(peerPort, '0.0.0.0', function () {
     log.info('server is listening')
   })
   return server
@@ -148,7 +148,8 @@ app.get('/status', (req, res) => {
   }))
   // put yourself as leader into the cluster info.
   response.push({ partitions: [], hostname: hostname, port: peerPort })
-  res.send(response)
+  res.setHeader('Content-Type', 'application/json');
+  res.send(JSON.stringify(response, null, 2))
 })
 
 const startMonitoring = () => {

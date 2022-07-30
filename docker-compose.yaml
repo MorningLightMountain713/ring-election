@@ -1,40 +1,73 @@
-version : '3'
+version: '3'
 
 services:
-  node-0:
-    image: pioardi/ring-election:1.0
-    environment: 
+  node-1:
+    image: megachips/ring-election:latest
+    environment:
       NODE_ENV: dev
       PORT: 3000
       MONITORING_PORT: 9000
-      SEED_NODES: node-0:3000,node-1:3001,node-2:3002
-    hostname: node-0
-    ports: 
-      - 3000:3000
-      - 9000:9000
-  node-1:
-    image: pioardi/ring-election:1.0
-    environment: 
-      NODE_ENV: dev
-      PORT: 3001
-      MONITORING_PORT: 9000
-      SEED_NODES: node-0:3000,node-1:3001,node-2:3002
+      SEED_NODES: 172.40.0.11:3000,172.40.0.12:3000,172.40.0.13:3000,172.40.0.14:3000,172.40.0.15:3000
     hostname: node-1
     ports:
-      - 3001:3001
       - 9001:9000
-    depends_on:
-      - node-0
+    networks:
+      ring:
+        ipv4_address: 172.40.0.11
   node-2:
-    image: pioardi/ring-election:1.0
-    environment: 
+    image: megachips/ring-election:latest
+    environment:
       NODE_ENV: dev
-      PORT: 3002
+      PORT: 3000
       MONITORING_PORT: 9000
-      SEED_NODES: node-0:3000,node-1:3001,node-2:3002
+      SEED_NODES: 172.40.0.11:3000,172.40.0.12:3000,172.40.0.13:3000,172.40.0.14:3000,172.40.0.15:3000
     hostname: node-2
     ports:
-      - 3002:3002
       - 9002:9000
-    depends_on:
-      - node-0
+    networks:
+      ring:
+        ipv4_address: 172.40.0.12
+  node-3:
+    image: megachips/ring-election:latest
+    environment:
+      NODE_ENV: dev
+      PORT: 3000
+      MONITORING_PORT: 9000
+      SEED_NODES: 172.40.0.11:3000,172.40.0.12:3000,172.40.0.13:3000,172.40.0.14:3000,172.40.0.15:3000
+    hostname: node-3
+    ports:
+      - 9003:9000
+    networks:
+      ring:
+        ipv4_address: 172.40.0.13
+  node-4:
+    image: megachips/ring-election:latest
+    environment:
+      NODE_ENV: dev
+      PORT: 3000
+      MONITORING_PORT: 9000
+      SEED_NODES: 172.40.0.11:3000,172.40.0.12:3000,172.40.0.13:3000,172.40.0.14:3000,172.40.0.15:3000
+    hostname: node-4
+    ports:
+      - 9004:9000
+    networks:
+      ring:
+        ipv4_address: 172.40.0.14
+  node-5:
+    image: megachips/ring-election:latest
+    environment:
+      NODE_ENV: dev
+      PORT: 3000
+      MONITORING_PORT: 9000
+      SEED_NODES: 172.40.0.11:3000,172.40.0.12:3000,172.40.0.13:3000,172.40.0.14:3000,172.40.0.15:3000
+    hostname: node-5
+    ports:
+      - 9005:9000
+    networks:
+      ring:
+        ipv4_address: 172.40.0.15
+networks:
+  ring:
+    ipam:
+      config:
+        - subnet: 172.40.0.0/16

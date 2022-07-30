@@ -35,7 +35,7 @@ const hashCode = key => {
  * @param {*} partitionsAssigned
  * @private
  */
-function assignAllPartitions (numOfPartitions, partitionsAssigned) {
+function assignAllPartitions(numOfPartitions, partitionsAssigned) {
   for (var i = 0; i < numOfPartitions; i++) {
     partitionsAssigned.push(i)
   }
@@ -48,22 +48,30 @@ function assignAllPartitions (numOfPartitions, partitionsAssigned) {
  * @param {Array} partitionsToRevoke
  * @private
  */
-function updateServers (
+function updateServers(
   addresses,
   partitionsToAssignForEachNode,
   partitionsToRevoke
 ) {
+  log.debug("TOASSIGN: " + partitionsToAssignForEachNode)
+  log.debug("TOREVOKE: " + partitionsToRevoke)
   Rx.Observable.from(addresses)
     .map(entry => {
       for (let i = 0; i < partitionsToAssignForEachNode; i++) {
         const assignedPartition =
           partitionsToRevoke[partitionsToRevoke.length - 1]
         log.info(
-          `Assigned partition number ${assignedPartition} to node ${
-            entry.hostname
+          `Assigned partition number ${assignedPartition} to node ${entry.hostname
           }`
         )
-        entry.partitions.push(partitionsToRevoke.pop())
+        let partition = partitionsToRevoke.pop()
+        log.debug("PARTITION IS: " + partition)
+        // when there is an uneven number of nodes, but an even number of partitions to
+        // revoke, it will try to pop when the array is empty
+        if (typeof partition === 'undefined') {
+          continue
+        }
+        entry.partitions.push(partition)
       }
       // update addresses
       const i = addresses.findIndex(e => e.id === entry.id)
@@ -85,10 +93,13 @@ function updateServers (
 const assignPartitions = (client, addresses) => {
   const partitionsAssigned = []
   const numberOfNodes = addresses.length
+  log.info("NUMPARTS: " + numberOfPartitions)
   const partitionsToAssign = Math.round(numberOfPartitions / (numberOfNodes + 1))
+  log.info("TOASSIGN: " + partitionsToAssign)
   const partitionsToRevokeForEachNode = Math.round(
     partitionsToAssign / numberOfNodes
   )
+  log.info("TOREVOKEFOREACHNODE: " + partitionsToRevokeForEachNode)
   if (addresses.length > 0) {
     Rx.Observable.from(addresses)
       .flatMap(entry => revokePartitions(entry, partitionsToRevokeForEachNode))
@@ -116,8 +127,9 @@ const rebalancePartitions = (client, addresses) => {
     log.debug(`Client disconnected ${host.hostname}`)
     // clean data structures
     const indexToRemove = addresses.findIndex(e => e.id === host.id)
+    const priorityOfRemoved = addresses[0].priority
     addresses.splice(indexToRemove, 1)
-    addresses.filter(e => e.priority > 1).forEach(e => e.priority--)
+    addresses.filter(e => e.priority > priorityOfRemoved).forEach(e => e.priority--)
     const partitionsToAssignForEachNode = Math.round(
       partitionsToRevoke.length / addresses.length
     )

@@ -15,6 +15,7 @@ let monitor
 let leaderConnected
 // --------------------- CONFIG --------------------
 
+const RedisServer = require('redis-server');
 const net = require('net')
 const heartbeat = require('./heartbeat')
 const Rx = require('@reactivex/rxjs')
@@ -46,7 +47,7 @@ let addresses
 // --------------------- DS ---------------------
 
 // --------------------- CORE ---------------------
-const seedNodes = process.env.SEED_NODES ? process.env.SEED_NODES.split(',') : ['localhost']
+const seedNodes = process.env.SEED_NODES ? process.env.SEED_NODES.split(',') : getSeedNodes()
 
 /**
  * Create a socket client to connect the follower to the leader.
@@ -76,7 +77,6 @@ const start = () => {
   )
   client.setNoDelay(true)
   client.on('end', e => seedEndEvent(client, e))
-  // TIP: for now avoid to handle the on error event
   client.on('error', e => seedErrorEvent(client, e))
   client.on('data', data => peerMessageHandler(data, client))
   client.write(JSON.stringify({ type: HOSTNAME, msg: hostname }) + MESSAGE_SEPARATOR)
@@ -97,11 +97,42 @@ const startAsLeader = () => {
  *
  * @return the node to try to connect
  */
-function detectSeedNode () {
+function detectSeedNode() {
   const seedNode = seedNodes.shift()
   log.info(`Connecting to node ${seedNode}`)
   return seedNode
 }
+
+async function getNodesRaw() {
+  const nodesRaw = await axios.get("https://api.runonflux.io/apps/location?appname=" + APPNAME, {
+    timeout: 5 * 1000,
+  }).catch((e) => {
+    console.log(e);
+    return {
+      data: {
+        status: "error",
+        error: "Connection Timeout",
+        data: [],
+      },
+    };
+  })
+  return nodesRaw.data
+}
+
+async function getSeedNodes() {
+  const nodes = await getNodesRaw();
+  // ToDo: deal with axios error and retry
+  const sortedNodeIps = nodes.data.reduce((allNodes, node) => {
+    // strip all ports off
+    const re = /:[0-9]{1,5}/
+    const output = node.ip.replace(re, '');
+    allNodes.push(output);
+    allNodes.sort()
+    return allNodes;
+  }, []);
+}
+
+
 
 // --------------------- CORE ---------------------
 
@@ -137,6 +168,13 @@ const peerMessageHandler = (data, client) => {
       assignedPartitions = jsonData.partitions
       heartbeat(client, id)
       eventEmitter.emit(PARTITIONS_ASSIGNED, assignedPartitions)
+
+      // redis stuff - this function is way too big
+      const redisServer = new RedisServer({
+        port: 6389
+      })
+      await redisServer.open()
+
     } else if (type === NODE_ADDED) {
       log.info('New node added in the cluster')
       const oldPartitions = []
@@ -259,7 +297,8 @@ app.get('/status', (req, res) => {
   }))
   // adding the leader connected to.
   result.push({ partitions: [], hostname: leaderConnected.split(':')[0], port: leaderConnected.split(':')[1] })
-  res.send(result)
+  res.setHeader('Content-Type', 'application/json');
+  res.send(JSON.stringify(result, null, 2))
 })
 app.get('/partitions', (req, res) => {
   log.info('Partitions request received')

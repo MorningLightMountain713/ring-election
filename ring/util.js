@@ -64,10 +64,23 @@ const searchClientById = (id, ds) => {
 const broadcastMessage = (addresses, msg) => {
   if (addresses.length > 0) {
     Rx.Observable.from(addresses).forEach(host => {
-      host.client.write(JSON.stringify(msg) + MESSAGE_SEPARATOR)
+      host.client.write(JSON.stringify(msg, getCircularReplacer()) + MESSAGE_SEPARATOR)
     })
   }
 }
+
+const getCircularReplacer = () => {
+  const seen = new WeakSet();
+  return (key, value) => {
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) {
+        return;
+      }
+      seen.add(value);
+    }
+    return value;
+  };
+};
 
 /**
  * @param {Array} first
