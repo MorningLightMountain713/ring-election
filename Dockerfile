@@ -23,5 +23,5 @@ RUN npm install --only=production
 # Bundle app source
 COPY . .
 
-EXPOSE 3000 8080
+# EXPOSE 3000 8080
 ENTRYPOINT [ "sh" , "./entrypoint.sh" ]

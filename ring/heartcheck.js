@@ -59,12 +59,13 @@ const removingNodes = (entry, index, heart, addresses) => {
   // time expired , clean up maps.
   removeFromHeart.push(entry[0])
   const host = util.searchClientById(entry[0], addresses)
+  const removedPriority = host.priority
   // in case that a client is explicitly disconnected , the entry is already removed from the Map.
   // rebalance partitions when a server is removed.
   if (host) {
     partitioner.rebalancePartitions(host.client, addresses)
   }
-  util.broadcastMessage(addresses, { type: NODE_REMOVED, msg: addresses })
+  util.broadcastMessage(addresses, { type: NODE_REMOVED, msg: addresses, removedPriority: removedPriority })
   removeFromHeart.forEach(e => {
     heart.delete(e)
   })

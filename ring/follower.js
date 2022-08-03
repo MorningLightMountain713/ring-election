@@ -7,12 +7,18 @@
 
 // --------------------- CONFIG ---------------------
 const os = require('os')
+
+// for sentinel config file
+const tmp = require('tmp');
+const fs = require('fs');
+
 const hostname = os.hostname()
 const log = require('./logger')
 const eventEmitter = require('./eventEmitter')
 const { timeToReconnect, monitoringPort, timeToBecomeSeed } = require('./config')
 let monitor
 let leaderConnected
+let partitionSize
 // --------------------- CONFIG --------------------
 
 const RedisServer = require('redis-server');
@@ -24,6 +30,7 @@ const { checkDiff } = require('./util')
 var id
 // priority to be elegible to be a seed node.
 var priority
+var redisPriority
 // Assigned partitions
 var assignedPartitions = []
 
@@ -32,22 +39,27 @@ const {
   NODE_ADDED,
   NODE_REMOVED,
   WELCOME,
-  HOSTNAME,
+  RECONNECT,
+  BOOTSTRAP,
   MESSAGE_SEPARATOR,
   BECOME_LEADER,
   PARTITIONS_ASSIGNED,
-  PARTITIONS_REVOKED
+  PARTITIONS_REVOKED,
+  PARTITION_CHANGE
 } = require('./constants')
 // --------------------- CONSTANTS ---------------------
 
 // --------------------- DS ---------------------
 /** Used for reconnection when a seed node die. */
 /* Addresses will be an array so that is more simple to exchange it as object during socket communication */
-let addresses
+let addresses = []
+let redisConfigured = false
+let seedNodesTried = 0
 // --------------------- DS ---------------------
 
 // --------------------- CORE ---------------------
 const seedNodes = process.env.SEED_NODES ? process.env.SEED_NODES.split(',') : getSeedNodes()
+const clientSockets = new Set(); // for monitoring
 
 /**
  * Create a socket client to connect the follower to the leader.
@@ -57,13 +69,16 @@ const seedNodes = process.env.SEED_NODES ? process.env.SEED_NODES.split(',') : g
 const start = () => {
   const seedNode = detectSeedNode()
 
-  if (!seedNode) {
+  if (seedNodesTried == seedNodes.length) {
     log.info(
       'Unable to connect to any node into the cluster,you will become the leader!'
     )
-    startAsLeader()
+    seedNodesTried = 0
+    startAsLeader(redisConfigured)
     return
   }
+
+  seedNodesTried++
 
   var client = net.connect(
     {
@@ -79,15 +94,24 @@ const start = () => {
   client.on('end', e => seedEndEvent(client, e))
   client.on('error', e => seedErrorEvent(client, e))
   client.on('data', data => peerMessageHandler(data, client))
-  client.write(JSON.stringify({ type: HOSTNAME, msg: hostname }) + MESSAGE_SEPARATOR)
+
+  if (id) { // we've already connected to a master before
+    client.write(JSON.stringify({ type: RECONNECT, msg: { id: id, priority: priority - 1, hostname: hostname, redisPriority: redisPriority } }) + MESSAGE_SEPARATOR)
+  }
+  else { // first time
+    client.write(JSON.stringify({ type: BOOTSTRAP, msg: hostname }) + MESSAGE_SEPARATOR)
+
+  }
   return client
 }
 
-const startAsLeader = () => {
+const startAsLeader = (isRedisConfigured) => {
+  log.info('Starting as leader...')
+  destroySockets(clientSockets) // otherwise it hangs for ages
   monitor.close(() => {
     log.info('Closing monitoring server started previously')
     const leader = require('./leader')
-    leader.createServer()
+    leader.createServer(isRedisConfigured) // redisConfigured = true
     leader.startMonitoring()
     eventEmitter.emit(BECOME_LEADER)
   })
@@ -98,9 +122,10 @@ const startAsLeader = () => {
  * @return the node to try to connect
  */
 function detectSeedNode() {
-  const seedNode = seedNodes.shift()
-  log.info(`Connecting to node ${seedNode}`)
-  return seedNode
+  const currentSeedNode = seedNodes.shift()
+  seedNodes.push(currentSeedNode)
+  log.info(`Connecting to node ${currentSeedNode}`)
+  return currentSeedNode
 }
 
 async function getNodesRaw() {
@@ -159,21 +184,80 @@ const peerMessageHandler = (data, client) => {
     const msg = jsonData.msg
     log.debug(`Receveid a message with type ${type}`)
     if (type === WELCOME) {
+      seedNodesTried = 0
       // convert array in a map.
       addresses = jsonData.msg
       id = jsonData.id
       priority = jsonData.priority
-      log.info(`Id in the ring ${id} , priority in the ring ${priority}`)
+      redisPriority = jsonData.redisPriority
+      log.info(`Id in the ring ${id} , priority in the ring ${priority}, redis priority in the ring ${redisPriority}`)
       log.info(`Assigned partitions : ${jsonData.partitions}`)
       assignedPartitions = jsonData.partitions
       heartbeat(client, id)
       eventEmitter.emit(PARTITIONS_ASSIGNED, assignedPartitions)
 
-      // redis stuff - this function is way too big
-      const redisServer = new RedisServer({
-        port: 6389
-      })
-      await redisServer.open()
+      // we get a new welcome message everytime we get a new master, however we only
+      // want to start server once
+      // this needs an else, it means that we have a new master, so we should update our
+      // priority to new priority
+      if (!redisConfigured) {
+        // redis stuff - this function is way too big
+        const sentinelConfig = `
+        sentinel monitor LEADER ${leaderConnected.split(':')[0]} 6379 2
+        sentinel down-after-milliseconds LEADER 5000
+        sentinel failover-timeout LEADER 15000
+        sentinel parallel-syncs LEADER 1`
+
+        const sConfigFile = tmp.fileSync();
+
+        fs.writeFileSync(sConfigFile.name, sentinelConfig)
+
+        const redisServer = new RedisServer({
+          port: 6379,
+          replicaof: leaderConnected.split(':')[0] + " 6379",
+          replicaPriority: redisPriority
+        })
+
+        redisServer.open((err) => {
+          if (err === null) {
+            log.info("Redis server started")
+          }
+          else {
+            log.info("Redis ERROR!!!")
+            log.info(err)
+          }
+        });
+
+        const sentinelServer = new RedisServer({
+          port: 26379,
+          sentinel: true,
+          conf: sConfigFile.name,
+        })
+        sentinelServer.open((err) => {
+          if (err === null) {
+            log.info("Sentinel server started")
+          }
+          else {
+            log.info("Sentinel ERROR!!!")
+            log.info(err)
+          }
+        });
+        redisConfigured = true
+      }
+      // else { // we need to set redis priority
+      //   // this is dogshit
+      //   const redis = require('redis');
+      //   const client = redis.createClient();
+
+      //   client.on('error', (err) => console.log('Redis Client Error', err));
+      //   client.on('ready', async () => {
+      //     console.log("THISPRIORITY:", priority)
+      //     await client.sendCommand(["CONFIG", "SET", "replica-priority", priority.toString()])
+      //     // await client.CONFIG_SET(`replica-priority ${priority}`)
+      //   })
+      //   client.connect();
+
+      // }
 
     } else if (type === NODE_ADDED) {
       log.info('New node added in the cluster')
@@ -182,7 +266,8 @@ const peerMessageHandler = (data, client) => {
       addresses = msg
       updatePartitionAssigned(oldPartitions)
     } else if (type === NODE_REMOVED) {
-      if (priority > 1) priority--
+      const removedPriority = jsonData.removedPriority
+      if (priority > removedPriority) priority--
       log.info(
         `A node was removed from the cluster , now my priority is ${priority}`
       )
@@ -190,6 +275,11 @@ const peerMessageHandler = (data, client) => {
       Object.assign(oldPartitions, assignedPartitions)
       addresses = msg
       updatePartitionAssigned(oldPartitions)
+    }
+    else if (type === PARTITION_CHANGE) {
+      partitionSize = msg.partitionSize
+      log.info(`Records per partition has changed to ${partitionSize}... updating`)
+      // do other partition stuff
     }
     // handle all types of messages.
   })
@@ -250,7 +340,7 @@ const seedEndEvent = (client, err) => {
     )
     assignedPartitions = []
 
-    setTimeout(startAsLeader, timeToBecomeSeed)
+    setTimeout(startAsLeader, timeToBecomeSeed, redisConfigured)
   } else {
     seedNodeReconnection()
   }
@@ -310,7 +400,20 @@ app.get('/partitions', (req, res) => {
  */
 const startMonitoring = () => {
   monitor = app.listen(monitoringPort)
+  monitor.on('connection', socket => {
+    clientSockets.add(socket);
+    socket.on("close", () => {
+      clientSockets.delete(socket);
+    });
+  });
+
   log.info(`Server is monitorable at the port ${monitoringPort}`)
+}
+
+function destroySockets(sockets) {
+  for (const socket of sockets.values()) {
+    socket.destroy();
+  }
 }
 
 module.exports = {

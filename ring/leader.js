@@ -13,16 +13,21 @@ const os = require('os')
 const hostname = os.hostname()
 // --------------------- CONFIG ---------------------
 
+const RedisServer = require('redis-server');
 const net = require('net')
 const util = require('./util')
 const heartbeatCheck = require('./heartcheck')
+
+const nodeFetcher = require('./nodefetcher')
+
 
 // --------------------- CONSTANTS ---------------------
 const {
   NODE_ADDED,
   HEART_BEAT,
   WELCOME,
-  HOSTNAME,
+  RECONNECT,
+  BOOTSTRAP,
   MESSAGE_SEPARATOR
 } = require('./constants')
 // --------------------- CONSTANTS ---------------------
@@ -33,6 +38,7 @@ const heart = new Map()
 /** Used for reconnection when a seed node die. */
 /* Addresses will be an array so that is more simple to exchange it as object during socket communication */
 const addresses = []
+
 // --------------------- DS ---------------------
 
 // --------------------- CORE ---------------------
@@ -40,8 +46,22 @@ const addresses = []
  * Create seed node server.
  * It will wait for client connections and will broadcast gossip info.
  */
-const createServer = () => {
+const createServer = (redisConfigured) => {
   log.info('Becoming leader...')
+  log.info('Redis is configured: ' + redisConfigured)
+
+  if (redisConfigured === false) {
+    log.info("Redis not configured... starting server")
+    const redisServer = new RedisServer({
+      port: 6379,
+    })
+    redisServer.open((err) => {
+      if (err === null) {
+        log.info("Redis server started")
+      }
+    })
+  }
+
   var server = net.createServer(client => {
     client.setNoDelay(true)
     log.info(`New Client connected host ${JSON.stringify(client.address())}`)
@@ -55,7 +75,11 @@ const createServer = () => {
   heartbeatCheck(heart, addresses)
   server.listen(peerPort, '0.0.0.0', function () {
     log.info('server is listening')
+    // do redis stuff after server starts - so clients can connect before they try
+    // to leader up
+    nodeFetcher(addresses)
   })
+
   return server
 }
 
@@ -79,11 +103,46 @@ const peerMessageHandler = (data, client) => {
     const msg = jsonData.msg
     if (type === HEART_BEAT) {
       heart.set(jsonData.id, Date.now())
-    } else if (type === HOSTNAME) {
-      clientHostname(client, msg)
+    } else if (type === BOOTSTRAP) {
+      bootstrapClient(client, msg)
+    }
+    else if (type === RECONNECT) {
+      reconnectClient(client, msg)
     }
     // handle all types of messages.
   })
+}
+
+function reconnectClient(client, msg) {
+  let cliendId = msg.id
+  let clientPriority = msg.priority
+  let clientHostname = msg.hostname
+  let clientRedisPriority = msg.redisPriority
+  console.log("CLIENTREDISPRIORITY:", clientRedisPriority)
+
+  let assignedPartitions = partitioner.assignPartitions(client, addresses)
+  heart.set(cliendId, Date.now())
+  addresses.push({
+    client: client,
+    hostname: clientHostname,
+    port: client.localPort,
+    id: cliendId,
+    partitions: assignedPartitions,
+    priority: clientPriority,
+    redisPriority: clientRedisPriority,
+
+  })
+  let welcome = {
+    type: WELCOME,
+    msg: addresses,
+    id: cliendId,
+    priority: clientPriority,
+    redisPriority: clientRedisPriority,
+    partitions: assignedPartitions
+  }
+  // sent ring info to the new peer.
+  client.write(JSON.stringify(welcome) + MESSAGE_SEPARATOR)
+  util.broadcastMessage(addresses, { type: NODE_ADDED, msg: addresses })
 }
 
 /**
@@ -91,8 +150,19 @@ const peerMessageHandler = (data, client) => {
  * @param {*} client client connected
  * @param {*} hostname  hostname of the client
  */
-const clientHostname = (client, hostname) => {
+function bootstrapClient(client, hostname) {
+
+  // new host, this is used for the replica-priority. We don't manage it so long as its
+  // higher 
+  let clientRedisPriority = addresses.length ? Math.max(...addresses.map(o => o.redisPriority)) : 0
+
+  clientRedisPriority++
+
+  //this needs to come from addresses - and if not set then last in the queue
+  // otherwise it gets reset every rebalance. Should stay the same
   const priority = addresses.length + 1
+
+
   const cliendId = generateID()
   const assignedPartitions = partitioner.assignPartitions(client, addresses)
   heart.set(cliendId, Date.now())
@@ -102,13 +172,16 @@ const clientHostname = (client, hostname) => {
     port: client.localPort,
     id: cliendId,
     partitions: assignedPartitions,
-    priority: priority
+    priority: priority,
+    redisPriority: clientRedisPriority,
+
   })
   const welcome = {
     type: WELCOME,
     msg: addresses,
     id: cliendId,
     priority: priority,
+    redisPriority: clientRedisPriority,
     partitions: assignedPartitions
   }
   // sent ring info to the new peer.

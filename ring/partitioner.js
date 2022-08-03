@@ -124,10 +124,11 @@ const rebalancePartitions = (client, addresses) => {
   if (host) {
     // save partitions
     const partitionsToRevoke = host.partitions
+    const priorityOfRemoved = host.priority
     log.debug(`Client disconnected ${host.hostname}`)
     // clean data structures
     const indexToRemove = addresses.findIndex(e => e.id === host.id)
-    const priorityOfRemoved = addresses[0].priority
+
     addresses.splice(indexToRemove, 1)
     addresses.filter(e => e.priority > priorityOfRemoved).forEach(e => e.priority--)
     const partitionsToAssignForEachNode = Math.round(
