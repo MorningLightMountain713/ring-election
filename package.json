@@ -1,16 +1,16 @@
 {
-  "name": "ring-election",
-  "version": "2.0.0",
-  "description": "Leader and followers algorithm to make partitioning easy.",
+  "name": "cerebro",
+  "version": "0.0.1",
+  "description": "Distributed connector for flux nodes",
   "main": "index.js",
   "engines": {
-    "node": ">=12.0.0",
+    "node": ">=17.0.0",
     "npm": ">=6.0.0"
   },
   "reveal": true,
   "repository": {
     "type": "git",
-    "url": "git://github.com/pioardi/ring-election.git"
+    "url": ""
   },
   "keywords": [
     "scalability",
@@ -63,10 +63,11 @@
     "axios": "^0.27.2",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
+    "dedent-js": "^1.0.1",
+    "default-gateway": "^6.0.3",
     "express": "^4.16.4",
     "ioredis": "^5.2.2",
-    "redis-server": "git@github.com:MorningLightMountain713/node-redis-server.git",
-    "tmp": "^0.2.1",
+    "ntp-time": "git@github.com:MorningLightMountain713/node-ntp-sync.git",
     "winston": "^3.2.1"
   },
   "devDependencies": {
@@ -74,7 +75,7 @@
     "coveralls": "^3.0.3",
     "expect": "^26.0.0",
     "lodash": "^4.17.11",
-    "mocha": "^8.3.0",
+    "mocha": "^10.0.0",
     "mocha-lcov-reporter": "^1.3.0",
     "mock-require": "^3.0.3",
     "nyc": "^15.0.0",

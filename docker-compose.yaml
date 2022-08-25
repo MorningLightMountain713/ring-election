@@ -2,9 +2,9 @@ version: '3'
 
 services:
   node-1:
-    image: megachips/ring-election:latest
+    image: megachips/cerebro:latest
     environment:
-      NODE_ENV: dev
+      # NODE_ENV: dev
       PORT: 3000
       MONITORING_PORT: 9000
       NUM_PARTITIONS: 128
@@ -18,9 +18,9 @@ services:
       ring:
         ipv4_address: 172.40.0.11
   node-2:
-    image: megachips/ring-election:latest
+    image: megachips/cerebro:latest
     environment:
-      NODE_ENV: dev
+      # NODE_ENV: dev
       PORT: 3000
       MONITORING_PORT: 9000
       NUM_PARTITIONS: 128
@@ -34,9 +34,9 @@ services:
       ring:
         ipv4_address: 172.40.0.12
   node-3:
-    image: megachips/ring-election:latest
+    image: megachips/cerebro:latest
     environment:
-      NODE_ENV: dev
+      # NODE_ENV: dev
       PORT: 3000
       MONITORING_PORT: 9000
       NUM_PARTITIONS: 128
@@ -50,9 +50,9 @@ services:
       ring:
         ipv4_address: 172.40.0.13
   node-4:
-    image: megachips/ring-election:latest
+    image: megachips/cerebro:latest
     environment:
-      NODE_ENV: dev
+      # NODE_ENV: dev
       PORT: 3000
       MONITORING_PORT: 9000
       NUM_PARTITIONS: 128
@@ -66,9 +66,9 @@ services:
       ring:
         ipv4_address: 172.40.0.14
   node-5:
-    image: megachips/ring-election:latest
+    image: megachips/cerebro:latest
     environment:
-      NODE_ENV: dev
+      # NODE_ENV: dev
       PORT: 3000
       MONITORING_PORT: 9000
       NUM_PARTITIONS: 128
