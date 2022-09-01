@@ -78,7 +78,7 @@ if (!appName && !seedNodes) {
 
   // so when nodes start up in local dev, they don't all start at the same time
   // just set this real low, no longer needed, can't be bothered removing
-  await sleep(randomIntFromInterval(10, 50))
+  // await sleep(randomIntFromInterval(10, 50))
 
   if (seedNodes) {
     seedNodes = seedNodes.split(",")
