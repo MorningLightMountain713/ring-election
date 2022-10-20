@@ -34,6 +34,7 @@
     "start": "node start.js",
     "build": "npm install",
     "test": "standard && export NODE_ENV=dev && nyc --check-coverage --lines 99 --reporter=text mocha --exit --timeout 10000 **/*test.js",
+    "testsingle": "standard && export NODE_ENV=dev && nyc --check-coverage --lines 99 --reporter=text mocha --exit --timeout 10000 test/dave.test.js",
     "test-debug": "standard && export NODE_ENV=dev && mocha --exit --inspect-brk --timeout 10000 **/*test.js",
     "integration-test": "nyc mocha --exit --timeout 300000 **/*/integration/*.js",
     "integration-test-debug": "mocha --inspect-brk --exit --timeout 300000 **/*/integration/*.js",

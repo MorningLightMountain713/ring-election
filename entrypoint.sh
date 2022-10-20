@@ -4,13 +4,9 @@
 echo $REDIS_PORT
 echo $SENTINEL_PORT
 echo $COMMS_PORT
-# echo $NTP_PORT
 
-# move this onto it's own container - gatekeeper
-# socat TCP-LISTEN:$REDIS_PORT,fork,allow-table=allow,deny-table=deny TCP:flux_cerebro_redisjson:6379 &
-# socat TCP-LISTEN:$SENTINEL_PORT,fork,allow-table=allow,deny-table=deny TCP:flux_cerebro_sentinel:26379 &
-# socat TCP-LISTEN:$COMMS_PORT,fork,allow-table=allow,deny-table=deny TCP:127.0.0.1:3000 &
-# socat TCP-LISTEN:$NTP_PORT,fork,allow-table=allow,deny-table=deny TCP:127.0.0.1:10123 &
+# gets the container name
+# dig -x `ifconfig eth0 | grep 'inet' | awk '{print $2}'` +short | cut -d'.' -f1
 
 /usr/sbin/sshd &
 
